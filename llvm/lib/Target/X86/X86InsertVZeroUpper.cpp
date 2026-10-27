@@ -8,9 +8,11 @@
 ///
 /// \file
 /// This file defines the pass which inserts x86 AVX vzeroupper instructions
-/// before calls to SSE encoded functions. This avoids transition latency
-/// penalty when transferring control between AVX encoded instructions and old
-/// SSE encoding mode.
+/// before calls to SSE encoded functions, and before legacy SSE instructions
+/// that write an XMM register, which under AVX means the ones with no VEX
+/// encoding (SHA, SSE4A, KL, WIDEKL). This avoids transition latency penalty
+/// when transferring control between AVX encoded instructions and old SSE
+/// encoding mode.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -19,6 +21,7 @@
 #include "X86Subtarget.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -75,11 +78,11 @@ enum BlockExitState { PASS_THROUGH, EXITS_CLEAN, EXITS_DIRTY };
 //                          DirtySuccessors list to ensure that it's not
 //                          added multiple times.
 //
-// FirstUnguardedCall - Records the location of the first unguarded call in
-//                      each basic block that may need to be guarded by a
-//                      vzeroupper. We won't know whether it actually needs
-//                      to be guarded until we discover a predecessor that
-//                      is DIRTY_OUT.
+// FirstUnguardedCall - Records the location of the first unguarded call (or
+//                      legacy SSE instruction) in each basic block that may
+//                      need to be guarded by a vzeroupper. We won't know
+//                      whether it actually needs to be guarded until we
+//                      discover a predecessor that is DIRTY_OUT.
 struct BlockState {
   BlockExitState ExitState = PASS_THROUGH;
   bool AddedToDirtySuccessors = false;
@@ -117,6 +120,36 @@ static const char *getBlockExitStateName(BlockExitState ST) {
 static bool isYmmOrZmmReg(MCRegister Reg) {
   return (Reg >= X86::YMM0 && Reg <= X86::YMM15) ||
          (Reg >= X86::ZMM0 && Reg <= X86::ZMM15);
+}
+
+/// Returns true if MI is legacy SSE encoded and writes an XMM register, which
+/// pays the SSE/AVX transition penalty when the upper state is dirty. Under AVX
+/// only instructions with no VEX form match, such as SHA, SSE4A, KL and WIDEKL.
+/// Implicit defs count, since ENCODEKEY* and the WIDEKL instructions write
+/// their XMM results only that way.
+static bool isLegacySSEWritingXmm(const MachineInstr &MI) {
+  // Pseudos (IMPLICIT_DEF, KILL, ...) have no encoding but read as LEGACY.
+  if (MI.isPseudo() ||
+      (MI.getDesc().TSFlags & X86II::EncodingMask) != X86II::LEGACY)
+    return false;
+  return any_of(MI.all_defs(), [](const MachineOperand &MO) {
+    return X86::VR128RegClass.contains(MO.getReg());
+  });
+}
+
+/// Collect the legacy SSE instructions in MBB with no YMM/ZMM0-15 register live
+/// across them, so a VZEROUPPER can go in front. LiveRegUnits would not do:
+/// XMMn and YMMn share register units, so a live XMMn would block the guard.
+static void collectGuardableLegacySSE(MachineBasicBlock &MBB,
+                                      SmallPtrSetImpl<MachineInstr *> &Set) {
+  LivePhysRegs LPR(*MBB.getParent()->getSubtarget().getRegisterInfo());
+  LPR.addLiveOuts(MBB);
+  for (MachineInstr &MI : reverse(MBB)) {
+    LPR.stepBackward(MI);
+    if (isLegacySSEWritingXmm(MI) &&
+        none_of(LPR, [](MCPhysReg R) { return isYmmOrZmmReg(R); }))
+      Set.insert(&MI);
+  }
 }
 
 static bool checkFnHasLiveInYmmOrZmm(MachineRegisterInfo &MRI) {
@@ -183,7 +216,7 @@ static void addDirtySuccessor(MachineBasicBlock &MBB,
 }
 
 /// Loop over all of the instructions in the basic block, inserting vzeroupper
-/// instructions before function calls.
+/// instructions before function calls and legacy SSE instructions.
 static bool processBasicBlock(MachineBasicBlock &MBB,
                               BlockStateMap &BlockStates,
                               DirtySuccessorsWorkList &DirtySuccessors,
@@ -193,6 +226,12 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
   BlockExitState CurState = PASS_THROUGH;
   BlockStates[MBB.getNumber()].FirstUnguardedCall = MBB.end();
   bool MadeChange = false;
+
+  // Finding guardable legacy SSE instructions needs valid block live-ins, so
+  // only do it when liveness is tracked, and lazily since few blocks have any.
+  bool GuardLegacySSE = MBB.getParent()->getProperties().hasTracksLiveness();
+  SmallPtrSet<MachineInstr *, 8> GuardableLegacySSE;
+  bool ComputedGuardable = false;
 
   for (MachineInstr &MI : MBB) {
     bool IsCall = MI.isCall();
@@ -210,8 +249,20 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
       continue;
     }
 
+    // A legacy SSE instruction needs a clean upper state just like a call
+    // does, provided no YMM/ZMM value is live across it.
+    bool NeedsCleanState = false;
+    if (GuardLegacySSE && !IsControlFlow && CurState != EXITS_CLEAN &&
+        isLegacySSEWritingXmm(MI)) {
+      if (!ComputedGuardable) {
+        collectGuardableLegacySSE(MBB, GuardableLegacySSE);
+        ComputedGuardable = true;
+      }
+      NeedsCleanState = GuardableLegacySSE.contains(&MI);
+    }
+
     // Shortcut: don't need to check regular instructions in dirty state.
-    if (!IsControlFlow && CurState == EXITS_DIRTY)
+    if (!IsControlFlow && !NeedsCleanState && CurState == EXITS_DIRTY)
       continue;
 
     if (hasYmmOrZmmReg(MI)) {
@@ -222,8 +273,8 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
     }
 
     // Check for control-flow out of the current function (which might
-    // indirectly execute SSE instructions).
-    if (!IsControlFlow)
+    // indirectly execute SSE instructions), or a legacy SSE instruction.
+    if (!IsControlFlow && !NeedsCleanState)
       continue;
 
     // If the call has no RegMask, skip it as well. It usually happens on
@@ -238,7 +289,7 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
     // registers. In addition, the processor changes back to Clean state, after
     // which execution of SSE instructions or AVX instructions has no transition
     // penalty. Add the VZEROUPPER instruction before any function call/return
-    // that might execute SSE code.
+    // that might execute SSE code, and before legacy SSE instructions.
     // FIXME: In some cases, we may want to move the VZEROUPPER into a
     // predecessor block.
     if (CurState == EXITS_DIRTY) {
@@ -249,10 +300,10 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
       CurState = EXITS_CLEAN;
     } else if (CurState == PASS_THROUGH) {
       // If this block is currently in pass-through state and we encounter a
-      // call then whether we need a vzeroupper or not depends on whether this
-      // block has successors that exit dirty. Record the location of the call,
-      // and set the state to EXITS_CLEAN, but do not insert the vzeroupper yet.
-      // It will be inserted later if necessary.
+      // call or legacy SSE instruction then whether we need a vzeroupper or not
+      // depends on whether this block has successors that exit dirty. Record
+      // its location, and set the state to EXITS_CLEAN, but do not insert the
+      // vzeroupper yet. It will be inserted later if necessary.
       BlockStates[MBB.getNumber()].FirstUnguardedCall = MI;
       CurState = EXITS_CLEAN;
     }
@@ -270,7 +321,7 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
 }
 
 /// Loop over all of the basic blocks, inserting vzeroupper instructions before
-/// function calls.
+/// function calls and legacy SSE instructions.
 static bool insertVZeroUpper(MachineFunction &MF) {
   const X86Subtarget &ST = MF.getSubtarget<X86Subtarget>();
   if (!ST.getCLOpts().use_vzeroupper || !ST.hasAVX() || !ST.insertVZEROUPPER())
@@ -326,8 +377,8 @@ static bool insertVZeroUpper(MachineFunction &MF) {
     DirtySuccessors.pop_back();
     BlockState &BBState = BlockStates[MBB.getNumber()];
 
-    // MBB is a successor of a dirty block, so its first call needs to be
-    // guarded.
+    // MBB is a successor of a dirty block, so its first call or legacy SSE
+    // instruction needs to be guarded.
     if (BBState.FirstUnguardedCall != MBB.end())
       EverMadeChange |= insertVZeroUpper(BBState.FirstUnguardedCall, MBB, TII);
 

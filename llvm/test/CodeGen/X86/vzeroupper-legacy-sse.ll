@@ -24,10 +24,10 @@ define <4 x i32> @sha_after_ymm(<8 x i32> %y, <4 x i32> %a, <4 x i32> %b, <4 x i
 ; CHECK-NEXT:    vpaddd %ymm0, %ymm0, %ymm0
 ; CHECK-NEXT:    vmovdqa %ymm0, (%rdi)
 ; CHECK-NEXT:    vmovaps %xmm3, %xmm0
+; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm2, %xmm1
 ; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm2, %xmm1
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm0
-; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    retq
   %add = add <8 x i32> %y, %y
   store <8 x i32> %add, ptr %p
@@ -49,12 +49,12 @@ define <4 x i32> @sha_loop_after_ymm(<8 x i32> %y, <4 x i32> %a, <4 x i32> %b, <
 ; CHECK-NEXT:  .LBB1_1: # %loop
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    vmovdqa %xmm3, %xmm0
+; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm2, %xmm1
 ; CHECK-NEXT:    decl %esi
 ; CHECK-NEXT:    jne .LBB1_1
 ; CHECK-NEXT:  # %bb.2: # %exit
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm0
-; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    retq
 entry:
   %add = add <8 x i32> %y, %y
@@ -128,9 +128,9 @@ define <2 x i64> @keylocker_after_ymm(<8 x i32> %y, <2 x i64> %d, ptr %h, ptr %p
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vpaddd %ymm0, %ymm0, %ymm0
 ; CHECK-NEXT:    vmovdqa %ymm0, (%rsi)
+; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    aesenc128kl (%rdi), %xmm1
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm0
-; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    retq
   %a = add <8 x i32> %y, %y
   store <8 x i32> %a, ptr %p
@@ -145,9 +145,9 @@ define <2 x i64> @extrq_after_ymm(<8 x i32> %y, <2 x i64> %d, ptr %p) nounwind {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vpaddd %ymm0, %ymm0, %ymm0
 ; CHECK-NEXT:    vmovdqa %ymm0, (%rdi)
+; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    extrq $2, $3, %xmm1
 ; CHECK-NEXT:    vmovdqa %xmm1, %xmm0
-; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    retq
   %a = add <8 x i32> %y, %y
   store <8 x i32> %a, ptr %p
@@ -166,9 +166,9 @@ define <4 x i32> @sha_after_zmm(<16 x i32> %z, <4 x i32> %a, <4 x i32> %b, <4 x 
 ; AVX2-NEXT:    vmovdqa %ymm1, 32(%rdi)
 ; AVX2-NEXT:    vmovdqa %ymm0, (%rdi)
 ; AVX2-NEXT:    vmovaps %xmm4, %xmm0
+; AVX2-NEXT:    vzeroupper
 ; AVX2-NEXT:    sha256rnds2 %xmm0, %xmm3, %xmm2
 ; AVX2-NEXT:    vmovaps %xmm2, %xmm0
-; AVX2-NEXT:    vzeroupper
 ; AVX2-NEXT:    retq
 ;
 ; AVX512-LABEL: sha_after_zmm:
@@ -176,9 +176,9 @@ define <4 x i32> @sha_after_zmm(<16 x i32> %z, <4 x i32> %a, <4 x i32> %b, <4 x 
 ; AVX512-NEXT:    vpaddd %zmm0, %zmm0, %zmm0
 ; AVX512-NEXT:    vmovdqa64 %zmm0, (%rdi)
 ; AVX512-NEXT:    vmovaps %xmm3, %xmm0
+; AVX512-NEXT:    vzeroupper
 ; AVX512-NEXT:    sha256rnds2 %xmm0, %xmm2, %xmm1
 ; AVX512-NEXT:    vmovaps %xmm1, %xmm0
-; AVX512-NEXT:    vzeroupper
 ; AVX512-NEXT:    retq
   %add = add <16 x i32> %z, %z
   store <16 x i32> %add, ptr %p
@@ -217,8 +217,8 @@ define <2 x i64> @widekl_after_ymm(<8 x i32> %y, <2 x i64> %d, ptr %h, ptr %p) n
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm5
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm6
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm7
-; CHECK-NEXT:    aesencwide128kl (%rdi)
 ; CHECK-NEXT:    vzeroupper
+; CHECK-NEXT:    aesencwide128kl (%rdi)
 ; CHECK-NEXT:    retq
   %a = add <8 x i32> %y, %y
   store <8 x i32> %a, ptr %p
@@ -235,8 +235,8 @@ define <2 x i64> @encodekey_after_ymm(<8 x i32> %y, <2 x i64> %k, ptr %p) nounwi
 ; CHECK-NEXT:    vmovdqa %ymm0, (%rdi)
 ; CHECK-NEXT:    xorl %eax, %eax
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm0
-; CHECK-NEXT:    encodekey128 %eax, %eax
 ; CHECK-NEXT:    vzeroupper
+; CHECK-NEXT:    encodekey128 %eax, %eax
 ; CHECK-NEXT:    retq
   %a = add <8 x i32> %y, %y
   store <8 x i32> %a, ptr %p
@@ -272,9 +272,9 @@ define <4 x i32> @sha_after_ymm_arg(<8 x i32> %y, <4 x i32> %a, <4 x i32> %b, <4
 ; CHECK-NEXT:    je .LBB11_2
 ; CHECK-NEXT:  # %bb.1: # %sha
 ; CHECK-NEXT:    vmovaps %xmm3, %xmm0
+; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm2, %xmm1
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm0
-; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    retq
 ; CHECK-NEXT:  .LBB11_2: # %store
 ; CHECK-NEXT:    vmovaps %ymm0, (%rsi)
@@ -305,11 +305,11 @@ define <4 x i32> @sha_after_ymm_call(<4 x i32> %a, <4 x i32> %b, <4 x i32> %k, p
 ; CHECK-NEXT:    vmovaps %ymm0, (%rbx)
 ; CHECK-NEXT:    vmovaps {{[-0-9]+}}(%r{{[sb]}}p), %xmm0 # 16-byte Reload
 ; CHECK-NEXT:    vmovaps (%rsp), %xmm1 # 16-byte Reload
+; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    sha256rnds2 %xmm0, {{[-0-9]+}}(%r{{[sb]}}p), %xmm1 # 16-byte Folded Reload
 ; CHECK-NEXT:    vmovaps %xmm1, %xmm0
 ; CHECK-NEXT:    addq $48, %rsp
 ; CHECK-NEXT:    popq %rbx
-; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    retq
   %y = call <8 x i32> @get_ymm()
   store <8 x i32> %y, ptr %p
@@ -372,9 +372,9 @@ define win64cc <4 x i32> @sha_win64(<8 x i32> %y, <4 x i32> %a, <4 x i32> %b, <4
 ; AVX2-NEXT:    movq {{[0-9]+}}(%rsp), %rax
 ; AVX2-NEXT:    vpaddd %ymm2, %ymm2, %ymm2
 ; AVX2-NEXT:    vmovdqa %ymm2, (%rax)
+; AVX2-NEXT:    vzeroupper
 ; AVX2-NEXT:    sha256rnds2 %xmm0, (%r8), %xmm1
 ; AVX2-NEXT:    vmovaps %xmm1, %xmm0
-; AVX2-NEXT:    vzeroupper
 ; AVX2-NEXT:    retq
 ;
 ; AVX512-LABEL: sha_win64:
@@ -384,9 +384,9 @@ define win64cc <4 x i32> @sha_win64(<8 x i32> %y, <4 x i32> %a, <4 x i32> %b, <4
 ; AVX512-NEXT:    movq {{[0-9]+}}(%rsp), %rax
 ; AVX512-NEXT:    vpslld $1, (%rcx), %ymm2
 ; AVX512-NEXT:    vmovdqa %ymm2, (%rax)
+; AVX512-NEXT:    vzeroupper
 ; AVX512-NEXT:    sha256rnds2 %xmm0, (%r8), %xmm1
 ; AVX512-NEXT:    vmovaps %xmm1, %xmm0
-; AVX512-NEXT:    vzeroupper
 ; AVX512-NEXT:    retq
   %add = add <8 x i32> %y, %y
   store <8 x i32> %add, ptr %p
