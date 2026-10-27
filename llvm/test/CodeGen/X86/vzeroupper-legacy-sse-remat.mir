@@ -55,9 +55,11 @@ body: |
     ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $xmm4 = VPSHUFBrr killed renamable $xmm0, renamable $xmm3
     ; CHECK-NEXT: $xmm0 = VMOVAPSrr $xmm2
+    ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
     ; CHECK-NEXT: renamable $xmm4 = SHA256RNDS2rr killed renamable $xmm4, renamable $xmm1, implicit $xmm0
     ; CHECK-NEXT: VMOVAPSmr renamable $rdi, 1, $noreg, 0, $noreg, renamable $xmm4 :: (store (s128))
     ; CHECK-NEXT: renamable $ymm0 = VMOVDQAYrm renamable $rsi, 1, $noreg, 0, $noreg :: (load (s256))
+    ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $ymm0 = VPSHUFBYrr killed renamable $ymm0, killed renamable $ymm3
     ; CHECK-NEXT: VMOVDQAYmr killed renamable $rsi, 1, $noreg, 0, $noreg, killed renamable $ymm0 :: (store (s256))
     ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
@@ -90,10 +92,12 @@ body: |
     ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $xmm4 = VPSHUFBrr killed renamable $xmm0, renamable $xmm3
     ; CHECK-NEXT: $xmm0 = VMOVAPSrr $xmm2
+    ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
     ; CHECK-NEXT: renamable $xmm4 = SHA256RNDS2rr killed renamable $xmm4, renamable $xmm1, implicit $xmm0
     ; CHECK-NEXT: VMOVAPSmr renamable $rdi, 1, $noreg, 0, $noreg, renamable $xmm4 :: (store (s128))
     ; CHECK-NEXT: DBG_VALUE $ymm3, $noreg, !3, !DIExpression(), debug-location !DILocation(line: 1, scope: !4)
     ; CHECK-NEXT: renamable $ymm0 = VMOVDQAYrm renamable $rsi, 1, $noreg, 0, $noreg :: (load (s256))
+    ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $ymm0 = VPSHUFBYrr killed renamable $ymm0, killed renamable $ymm3
     ; CHECK-NEXT: VMOVDQAYmr killed renamable $rsi, 1, $noreg, 0, $noreg, killed renamable $ymm0 :: (store (s256))
     ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
@@ -127,12 +131,15 @@ body: |
     ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $xmm4 = VPSHUFBrr killed renamable $xmm0, renamable $xmm3
     ; CHECK-NEXT: $xmm0 = VMOVAPSrr $xmm2
+    ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
     ; CHECK-NEXT: renamable $xmm4 = SHA256RNDS2rr killed renamable $xmm4, renamable $xmm1, implicit $xmm0
     ; CHECK-NEXT: renamable $ymm5 = VMOVDQAYrm renamable $rsi, 1, $noreg, 32, $noreg :: (load (s256))
     ; CHECK-NEXT: VMOVDQAYmr renamable $rsi, 1, $noreg, 64, $noreg, killed renamable $ymm5 :: (store (s256))
+    ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
     ; CHECK-NEXT: renamable $xmm4 = SHA256RNDS2rr killed renamable $xmm4, renamable $xmm1, implicit $xmm0
     ; CHECK-NEXT: VMOVAPSmr renamable $rdi, 1, $noreg, 0, $noreg, renamable $xmm4 :: (store (s128))
     ; CHECK-NEXT: renamable $ymm0 = VMOVDQAYrm renamable $rsi, 1, $noreg, 0, $noreg :: (load (s256))
+    ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $ymm0 = VPSHUFBYrr killed renamable $ymm0, killed renamable $ymm3
     ; CHECK-NEXT: VMOVDQAYmr killed renamable $rsi, 1, $noreg, 0, $noreg, killed renamable $ymm0 :: (store (s256))
     ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
@@ -289,10 +296,12 @@ body: |
     ; CHECK-NEXT: renamable $ymm17 = VMOVDQA64Z256rm $rsi, 1, $noreg, 32, $noreg :: (load (s256))
     ; CHECK-NEXT: renamable $xmm4 = VPSHUFBZ128rr killed renamable $xmm0, renamable $xmm3
     ; CHECK-NEXT: $xmm0 = VMOVAPSrr $xmm2
+    ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
     ; CHECK-NEXT: renamable $xmm4 = SHA256RNDS2rr killed renamable $xmm4, renamable $xmm1, implicit $xmm0
     ; CHECK-NEXT: VMOVAPSmr renamable $rdi, 1, $noreg, 0, $noreg, renamable $xmm4 :: (store (s128))
     ; CHECK-NEXT: VMOVDQA64Z256mr renamable $rsi, 1, $noreg, 64, $noreg, killed renamable $ymm17 :: (store (s256))
     ; CHECK-NEXT: renamable $ymm0 = VMOVDQAYrm renamable $rsi, 1, $noreg, 0, $noreg :: (load (s256))
+    ; CHECK-NEXT: renamable $ymm3 = VMOVDQA64Z256rm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $ymm0 = VPSHUFBZ256rr killed renamable $ymm0, killed renamable $ymm3
     ; CHECK-NEXT: VMOVDQAYmr killed renamable $rsi, 1, $noreg, 0, $noreg, killed renamable $ymm0 :: (store (s256))
     ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
@@ -328,10 +337,12 @@ body: |
     ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $xmm4 = VPSHUFBrr killed renamable $xmm0, renamable $xmm3
     ; CHECK-NEXT: $xmm0 = VMOVAPSrr $xmm2
+    ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
     ; CHECK-NEXT: renamable $xmm4 = SHA256RNDS2rr killed renamable $xmm4, renamable $xmm1, implicit $xmm0
     ; CHECK-NEXT: renamable $xmm4 = VPSHUFBrr killed renamable $xmm4, renamable $xmm3
     ; CHECK-NEXT: VMOVAPSmr renamable $rdi, 1, $noreg, 0, $noreg, renamable $xmm4 :: (store (s128))
     ; CHECK-NEXT: renamable $ymm0 = VMOVDQAYrm renamable $rsi, 1, $noreg, 0, $noreg :: (load (s256))
+    ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $ymm0 = VPSHUFBYrr killed renamable $ymm0, killed renamable $ymm3
     ; CHECK-NEXT: VMOVDQAYmr killed renamable $rsi, 1, $noreg, 0, $noreg, killed renamable $ymm0 :: (store (s256))
     ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
@@ -369,10 +380,13 @@ body: |
     ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $ymm5 = VPBROADCASTDYrm $rip, 1, $noreg, %const.1, $noreg :: (load (s32) from constant-pool)
     ; CHECK-NEXT: $xmm0 = VMOVAPSrr $xmm2
+    ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
     ; CHECK-NEXT: renamable $xmm1 = SHA256RNDS2rr killed renamable $xmm1, renamable $xmm2, implicit $xmm0
     ; CHECK-NEXT: VMOVAPSmr renamable $rdi, 1, $noreg, 0, $noreg, renamable $xmm1 :: (store (s128))
     ; CHECK-NEXT: renamable $ymm0 = VMOVDQAYrm renamable $rsi, 1, $noreg, 0, $noreg :: (load (s256))
+    ; CHECK-NEXT: renamable $ymm5 = VPBROADCASTDYrm $rip, 1, $noreg, %const.1, $noreg :: (load (s32) from constant-pool)
     ; CHECK-NEXT: renamable $ymm0 = VPADDDYrr killed renamable $ymm0, killed renamable $ymm5
+    ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $ymm0 = VPSHUFBYrr killed renamable $ymm0, killed renamable $ymm3
     ; CHECK-NEXT: VMOVDQAYmr killed renamable $rsi, 1, $noreg, 0, $noreg, killed renamable $ymm0 :: (store (s256))
     ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
@@ -546,8 +560,10 @@ body: |
     ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: renamable $xmm4 = VPSHUFBrr killed renamable $xmm0, renamable $xmm3
     ; CHECK-NEXT: $xmm0 = VMOVAPSrr $xmm2
+    ; CHECK-NEXT: VZEROUPPER implicit-def $ymm0, implicit-def $ymm1, implicit-def $ymm2, implicit-def $ymm3, implicit-def $ymm4, implicit-def $ymm5, implicit-def $ymm6, implicit-def $ymm7, implicit-def $ymm8, implicit-def $ymm9, implicit-def $ymm10, implicit-def $ymm11, implicit-def $ymm12, implicit-def $ymm13, implicit-def $ymm14, implicit-def $ymm15
     ; CHECK-NEXT: renamable $xmm4 = SHA256RNDS2rr killed renamable $xmm4, renamable $xmm1, implicit $xmm0
     ; CHECK-NEXT: VMOVAPSmr renamable $rdi, 1, $noreg, 0, $noreg, renamable $xmm4 :: (store (s128))
+    ; CHECK-NEXT: renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     ; CHECK-NEXT: TCRETURNdi64 @g, 0, csr_64, implicit $rsp, implicit $ssp, implicit $ymm3
     renamable $ymm3 = VMOVDQAYrm $rip, 1, $noreg, %const.0, $noreg :: (load (s256) from constant-pool)
     renamable $xmm4 = VPSHUFBrr killed renamable $xmm0, renamable $xmm3

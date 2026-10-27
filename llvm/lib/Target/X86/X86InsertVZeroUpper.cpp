@@ -19,6 +19,7 @@
 #include "X86.h"
 #include "X86InstrInfo.h"
 #include "X86Subtarget.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
@@ -91,6 +92,16 @@ struct BlockState {
   BlockState() = default;
 };
 
+/// A YMM register live across a guarded legacy SSE instruction, which the
+/// VZEROUPPER in front of it clobbers. Def loaded it from the constant pool
+/// earlier in the block, and is repeated before Use, the next instruction that
+/// reads more than its low 128 bits.
+struct RematYmm {
+  MCRegister Reg;
+  MachineInstr *Def;
+  MachineInstr *Use;
+};
+
 using BlockStateMap = SmallVector<BlockState, 8>;
 using DirtySuccessorsWorkList = SmallVector<MachineBasicBlock *, 8>;
 } // end anonymous namespace
@@ -137,18 +148,109 @@ static bool isLegacySSEWritingXmm(const MachineInstr &MI) {
   });
 }
 
-/// Collect the legacy SSE instructions in MBB with no YMM/ZMM0-15 register live
-/// across them, so a VZEROUPPER can go in front. LiveRegUnits would not do:
-/// XMMn and YMMn share register units, so a live XMMn would block the guard.
-static void collectGuardableLegacySSE(MachineBasicBlock &MBB,
-                                      SmallPtrSetImpl<MachineInstr *> &Set) {
-  LivePhysRegs LPR(*MBB.getParent()->getSubtarget().getRegisterInfo());
+/// TII->isTriviallyReMaterializable() would accept most of these, but not the
+/// AVX2 broadcast loads (VPBROADCAST*Yrm, VBROADCASTI128rm).
+static bool isConstantPoolLoad(const MachineInstr &MI) {
+  return MI.mayLoad() && !MI.mayStore() && MI.getNumExplicitDefs() == 1 &&
+         MI.isDereferenceableInvariantLoad() &&
+         any_of(MI.operands(),
+                [](const MachineOperand &MO) { return MO.isCPI(); }) &&
+         all_of(MI.uses(), [](const MachineOperand &MO) {
+           return !MO.isReg() || !MO.getReg() || MO.getReg() == X86::RIP;
+         });
+}
+
+static bool readsUpperYmm(const MachineInstr &MI, MCRegister Ymm,
+                          const TargetRegisterInfo *TRI) {
+  return any_of(MI.operands(), [&](const MachineOperand &MO) {
+    return MO.isReg() && MO.readsReg() &&
+           TRI->isSuperRegisterEq(Ymm, MO.getReg());
+  });
+}
+
+/// Collect the legacy SSE instructions in MBB that a VZEROUPPER can go in
+/// front of: those with no YMM/ZMM0-15 register live across them, or whose
+/// only live YMM registers can be reloaded afterwards (recorded in Remat).
+/// LiveRegUnits would not do: XMMn and YMMn share register units, so a live
+/// XMMn would block the guard.
+static void collectGuardableLegacySSE(
+    MachineBasicBlock &MBB, SmallPtrSetImpl<MachineInstr *> &Set,
+    DenseMap<MachineInstr *, SmallVector<RematYmm, 1>> &Remat) {
+  const TargetRegisterInfo *TRI =
+      MBB.getParent()->getSubtarget().getRegisterInfo();
+  // Above -O0, LVI load hardening fences loads before this pass runs, so a
+  // reload added here would go unfenced.
+  bool CanReload =
+      !MBB.getParent()->getSubtarget<X86Subtarget>().useLVILoadHardening();
+  // Backward: liveness, and the next read of each YMM's upper half.
+  std::array<MachineInstr *, 16> NextUse = {};
+  MachineBasicBlock::iterator FirstTerm = MBB.getFirstTerminator();
+  LivePhysRegs LPR(*TRI);
   LPR.addLiveOuts(MBB);
   for (MachineInstr &MI : reverse(MBB)) {
+    if (MI.isDebugInstr())
+      continue;
     LPR.stepBackward(MI);
-    if (isLegacySSEWritingXmm(MI) &&
-        none_of(LPR, [](MCPhysReg R) { return isYmmOrZmmReg(R); }))
-      Set.insert(&MI);
+    if (isLegacySSEWritingXmm(MI)) {
+      SmallVector<RematYmm, 1> Restore;
+      bool Guardable = true;
+      for (MCPhysReg R : LPR) {
+        if (!isYmmOrZmmReg(R))
+          continue;
+        if (!CanReload || !X86::VR256RegClass.contains(R) ||
+            !NextUse[R - X86::YMM0]) {
+          Guardable = false;
+          break;
+        }
+        Restore.push_back({R, nullptr, NextUse[R - X86::YMM0]});
+      }
+      if (Guardable) {
+        Set.insert(&MI);
+        if (!Restore.empty())
+          Remat[&MI] = std::move(Restore);
+      }
+    }
+    // The block can be left at a terminator, a call that throws, or inline
+    // asm (asm goto, or asm that unwinds), so a reload after one of them may
+    // not cover every path. Anything else with unmodeled side effects is
+    // treated the same way. A reload can still go right before such an
+    // instruction, but not between two terminators.
+    if (MI.isCall() || MI.isTerminator() || MI.isInlineAsm() ||
+        MI.hasUnmodeledSideEffects())
+      NextUse.fill(nullptr);
+    if (MI.isTerminator() && MachineBasicBlock::iterator(MI) != FirstTerm)
+      continue;
+    for (unsigned I = 0; I != NextUse.size(); ++I) {
+      MCRegister Ymm = X86::YMM0 + I;
+      if (readsUpperYmm(MI, Ymm, TRI))
+        NextUse[I] = &MI;
+      else if (MI.modifiesRegister(Ymm, TRI))
+        NextUse[I] = nullptr;
+    }
+  }
+  if (Remat.empty())
+    return;
+  // Forward: the constant-pool load each live YMM came from, if any.
+  std::array<MachineInstr *, 16> LastDef = {};
+  for (MachineInstr &MI : MBB) {
+    if (MI.isDebugInstr())
+      continue;
+    auto It = Remat.find(&MI);
+    if (It != Remat.end()) {
+      for (RematYmm &RY : It->second)
+        RY.Def = LastDef[RY.Reg - X86::YMM0];
+      if (any_of(It->second, [](const RematYmm &RY) { return !RY.Def; })) {
+        Set.erase(&MI);
+        Remat.erase(It);
+      }
+    }
+    for (unsigned I = 0; I != LastDef.size(); ++I) {
+      MCRegister Ymm = X86::YMM0 + I;
+      if (MI.modifiesRegister(Ymm, TRI))
+        LastDef[I] = isConstantPoolLoad(MI) && MI.getOperand(0).getReg() == Ymm
+                         ? &MI
+                         : nullptr;
+    }
   }
 }
 
@@ -231,6 +333,8 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
   // only do it when liveness is tracked, and lazily since few blocks have any.
   bool GuardLegacySSE = MBB.getParent()->getProperties().hasTracksLiveness();
   SmallPtrSet<MachineInstr *, 8> GuardableLegacySSE;
+  DenseMap<MachineInstr *, SmallVector<RematYmm, 1>> RematLegacySSE;
+  SmallSet<std::pair<MachineInstr *, MachineInstr *>, 2> Rematerialized;
   bool ComputedGuardable = false;
 
   for (MachineInstr &MI : MBB) {
@@ -250,12 +354,12 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
     }
 
     // A legacy SSE instruction needs a clean upper state just like a call
-    // does, provided no YMM/ZMM value is live across it.
+    // does, provided any YMM/ZMM value live across it can be reloaded after.
     bool NeedsCleanState = false;
     if (GuardLegacySSE && !IsControlFlow && CurState != EXITS_CLEAN &&
         isLegacySSEWritingXmm(MI)) {
       if (!ComputedGuardable) {
-        collectGuardableLegacySSE(MBB, GuardableLegacySSE);
+        collectGuardableLegacySSE(MBB, GuardableLegacySSE, RematLegacySSE);
         ComputedGuardable = true;
       }
       NeedsCleanState = GuardableLegacySSE.contains(&MI);
@@ -298,12 +402,22 @@ static bool processBasicBlock(MachineBasicBlock &MBB,
       // the end of the BB.
       MadeChange |= insertVZeroUpper(MI, MBB, TII);
       CurState = EXITS_CLEAN;
+      // Reload any YMM constant the VZEROUPPER clobbered before its upper half
+      // is next read.
+      if (NeedsCleanState) {
+        for (const RematYmm &RY : RematLegacySSE.lookup(&MI))
+          if (Rematerialized.insert({RY.Def, RY.Use}).second)
+            MBB.insert(MachineBasicBlock::iterator(RY.Use),
+                       MBB.getParent()->CloneMachineInstr(RY.Def));
+      }
     } else if (CurState == PASS_THROUGH) {
       // If this block is currently in pass-through state and we encounter a
       // call or legacy SSE instruction then whether we need a vzeroupper or not
       // depends on whether this block has successors that exit dirty. Record
       // its location, and set the state to EXITS_CLEAN, but do not insert the
       // vzeroupper yet. It will be inserted later if necessary.
+      // A reloadable YMM was loaded earlier in this block, which left it dirty.
+      assert(!RematLegacySSE.count(&MI) && "Deferred guard cannot reload YMM");
       BlockStates[MBB.getNumber()].FirstUnguardedCall = MI;
       CurState = EXITS_CLEAN;
     }

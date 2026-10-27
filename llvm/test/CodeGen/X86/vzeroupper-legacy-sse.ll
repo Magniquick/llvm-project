@@ -407,10 +407,13 @@ define void @sha_live_const_ymm(<16 x i8> %x, <4 x i32> %b, <4 x i32> %k, ptr %p
 ; CHECK-NEXT:    # ymm3 = mem[0,1,0,1]
 ; CHECK-NEXT:    vpshufb %xmm3, %xmm0, %xmm4
 ; CHECK-NEXT:    vmovaps %xmm2, %xmm0
+; CHECK-NEXT:    vzeroupper
 ; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm1, %xmm4
 ; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm1, %xmm4
 ; CHECK-NEXT:    vmovaps %xmm4, (%rdi)
 ; CHECK-NEXT:    vmovdqa (%rsi), %ymm0
+; CHECK-NEXT:    vbroadcasti128 {{.*#+}} ymm3 = [3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12,3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12]
+; CHECK-NEXT:    # ymm3 = mem[0,1,0,1]
 ; CHECK-NEXT:    vpshufb %ymm3, %ymm0, %ymm0
 ; CHECK-NEXT:    vmovdqa %ymm0, (%rsi)
 ; CHECK-NEXT:    vzeroupper
