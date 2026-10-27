@@ -15,6 +15,8 @@ declare { i8, <2 x i64>, <2 x i64>, <2 x i64>, <2 x i64>, <2 x i64>, <2 x i64>, 
 declare { i32, <2 x i64>, <2 x i64>, <2 x i64>, <2 x i64>, <2 x i64>, <2 x i64> } @llvm.x86.encodekey128(i32, <2 x i64>)
 declare void @llvm.x86.sse4a.movnt.ss(ptr, <4 x float>)
 declare <8 x i32> @get_ymm()
+declare <16 x i8> @llvm.x86.ssse3.pshuf.b.128(<16 x i8>, <16 x i8>)
+declare <32 x i8> @llvm.x86.avx2.pshuf.b(<32 x i8>, <32 x i8>)
 
 ; The dirtying 256-bit op and the SHA instructions are in the same basic block.
 ; One vzeroupper should cover both SHA instructions.
@@ -393,3 +395,64 @@ define win64cc <4 x i32> @sha_win64(<8 x i32> %y, <4 x i32> %a, <4 x i32> %b, <4
   %r = call <4 x i32> @llvm.x86.sha256rnds2(<4 x i32> %a, <4 x i32> %b, <4 x i32> %k)
   ret <4 x i32> %r
 }
+
+; A 256-bit constant is live across the SHA instructions: its low half feeds
+; them and the whole of it is read afterwards. It can be reloaded from the
+; constant pool after the vzeroupper, so both SHA instructions should still be
+; guarded, by one vzeroupper and one reload.
+define void @sha_live_const_ymm(<16 x i8> %x, <4 x i32> %b, <4 x i32> %k, ptr %p, ptr %q) nounwind {
+; CHECK-LABEL: sha_live_const_ymm:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vbroadcasti128 {{.*#+}} ymm3 = [3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12,3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12]
+; CHECK-NEXT:    # ymm3 = mem[0,1,0,1]
+; CHECK-NEXT:    vpshufb %xmm3, %xmm0, %xmm4
+; CHECK-NEXT:    vmovaps %xmm2, %xmm0
+; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm1, %xmm4
+; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm1, %xmm4
+; CHECK-NEXT:    vmovaps %xmm4, (%rdi)
+; CHECK-NEXT:    vmovdqa (%rsi), %ymm0
+; CHECK-NEXT:    vpshufb %ymm3, %ymm0, %ymm0
+; CHECK-NEXT:    vmovdqa %ymm0, (%rsi)
+; CHECK-NEXT:    vzeroupper
+; CHECK-NEXT:    retq
+  %s = call <16 x i8> @llvm.x86.ssse3.pshuf.b.128(<16 x i8> %x, <16 x i8> <i8 3, i8 2, i8 1, i8 0, i8 7, i8 6, i8 5, i8 4, i8 11, i8 10, i8 9, i8 8, i8 15, i8 14, i8 13, i8 12>)
+  %a = bitcast <16 x i8> %s to <4 x i32>
+  %r1 = call <4 x i32> @llvm.x86.sha256rnds2(<4 x i32> %a, <4 x i32> %b, <4 x i32> %k)
+  %r2 = call <4 x i32> @llvm.x86.sha256rnds2(<4 x i32> %r1, <4 x i32> %b, <4 x i32> %k)
+  store <4 x i32> %r2, ptr %p
+  %y = load <32 x i8>, ptr %q
+  %t = call <32 x i8> @llvm.x86.avx2.pshuf.b(<32 x i8> %y, <32 x i8> <i8 3, i8 2, i8 1, i8 0, i8 7, i8 6, i8 5, i8 4, i8 11, i8 10, i8 9, i8 8, i8 15, i8 14, i8 13, i8 12, i8 3, i8 2, i8 1, i8 0, i8 7, i8 6, i8 5, i8 4, i8 11, i8 10, i8 9, i8 8, i8 15, i8 14, i8 13, i8 12>)
+  store <32 x i8> %t, ptr %q
+  ret void
+}
+
+; Negative: with LVI load hardening the constant loads have already been fenced,
+; and a reload would not be, so the SHA instructions stay unguarded.
+define void @sha_live_const_ymm_lvi(<16 x i8> %x, <4 x i32> %b, <4 x i32> %k, ptr %p, ptr %q) #0 {
+; CHECK-LABEL: sha_live_const_ymm_lvi:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lfence
+; CHECK-NEXT:    vbroadcasti128 {{.*#+}} ymm3 = [3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12,3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12]
+; CHECK-NEXT:    # ymm3 = mem[0,1,0,1]
+; CHECK-NEXT:    vpshufb %xmm3, %xmm0, %xmm4
+; CHECK-NEXT:    vmovaps %xmm2, %xmm0
+; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm1, %xmm4
+; CHECK-NEXT:    sha256rnds2 %xmm0, %xmm1, %xmm4
+; CHECK-NEXT:    vmovaps %xmm4, (%rdi)
+; CHECK-NEXT:    vmovdqa (%rsi), %ymm0
+; CHECK-NEXT:    vpshufb %ymm3, %ymm0, %ymm0
+; CHECK-NEXT:    vmovdqa %ymm0, (%rsi)
+; CHECK-NEXT:    vzeroupper
+; CHECK-NEXT:    retq
+  %s = call <16 x i8> @llvm.x86.ssse3.pshuf.b.128(<16 x i8> %x, <16 x i8> <i8 3, i8 2, i8 1, i8 0, i8 7, i8 6, i8 5, i8 4, i8 11, i8 10, i8 9, i8 8, i8 15, i8 14, i8 13, i8 12>)
+  %a = bitcast <16 x i8> %s to <4 x i32>
+  %r1 = call <4 x i32> @llvm.x86.sha256rnds2(<4 x i32> %a, <4 x i32> %b, <4 x i32> %k)
+  %r2 = call <4 x i32> @llvm.x86.sha256rnds2(<4 x i32> %r1, <4 x i32> %b, <4 x i32> %k)
+  store <4 x i32> %r2, ptr %p
+  %y = load <32 x i8>, ptr %q
+  %t = call <32 x i8> @llvm.x86.avx2.pshuf.b(<32 x i8> %y, <32 x i8> <i8 3, i8 2, i8 1, i8 0, i8 7, i8 6, i8 5, i8 4, i8 11, i8 10, i8 9, i8 8, i8 15, i8 14, i8 13, i8 12, i8 3, i8 2, i8 1, i8 0, i8 7, i8 6, i8 5, i8 4, i8 11, i8 10, i8 9, i8 8, i8 15, i8 14, i8 13, i8 12>)
+  store <32 x i8> %t, ptr %q
+  ret void
+}
+
+attributes #0 = { nounwind "target-features"="+lvi-load-hardening" }
